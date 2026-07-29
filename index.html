@@ -69,6 +69,48 @@
   .seg button{flex:1;padding:8px;border:1px solid var(--line2);border-radius:9px;background:#fff;
     color:var(--sub);font-weight:800;font-size:12.5px}
   .seg button.on{background:var(--green-d);color:#fff;border-color:var(--green-d)}
+  /* リアルタイムガイド */
+  .guide{display:flex;align-items:center;gap:10px;margin-top:10px;padding:11px 13px;border-radius:13px;
+    background:#f1f6f3;border:1px solid #dcebe3;transition:background .25s,border-color .25s}
+  .guide.warn{background:#fdf4ef;border-color:#f0d9cc}
+  .guide.bad{background:#fdeeea;border-color:#f2cfc4}
+  .guide .gi{font-size:19px;line-height:1;flex:none}
+  .guide .gt{font-size:13.5px;font-weight:800;color:var(--green-dd)}
+  .guide.warn .gt{color:#a8663f} .guide.bad .gt{color:var(--terra)}
+  .qbar{margin-top:8px}
+  .qbar .ql{display:flex;justify-content:space-between;font-size:11px;color:var(--sub);font-weight:700;margin-bottom:3px}
+  .qbar .qt{height:7px;background:#eef1ef;border-radius:5px;overflow:hidden}
+  .qbar .qt i{display:block;height:100%;width:0;background:var(--green-d);border-radius:5px;transition:width .3s}
+  .qbar .qt i.low{background:var(--amber)} .qbar .qt i.bad{background:var(--terra)}
+  /* 信頼度の星 */
+  .stars{font-size:19px;letter-spacing:2px;margin-top:6px}
+  .stars .on{color:#e0a92e} .stars .off{color:#d8ded9}
+  .starnote{font-size:12px;color:var(--sub);font-weight:700;margin-top:2px}
+  /* 検証入力 */
+  .vbox{margin-top:14px;padding-top:14px;border-top:1px solid var(--line2);text-align:left}
+  .vbox h4{margin:0 0 4px;font-size:13.5px;font-weight:800}
+  .vrow{display:flex;align-items:center;gap:10px;margin-top:8px}
+  .vrow label{flex:none;width:126px;font-size:12.5px;color:var(--sub);font-weight:700}
+  .vrow input,.vrow select{flex:1;min-width:0;padding:10px 12px;font-size:16px;font-family:inherit;
+    border:1px solid var(--line);border-radius:11px;background:#fbfcfb;color:var(--ink)}
+  .vrow .fixed{flex:1;font-size:17px;font-weight:800}
+  .vdiff{font-size:13px;font-weight:800;margin-top:8px;min-height:20px}
+  .vhint{font-size:11.5px;color:var(--sub);margin-top:6px}
+  .vok{background:#f1f6f3;border:1px solid #dcebe3;border-radius:11px;padding:10px 12px;
+    font-size:12.5px;font-weight:700;color:var(--green-dd);margin-top:10px}
+  /* 集計 */
+  .stat{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--line2)}
+  .stat:last-child{border-bottom:0}
+  .stat .sl{color:var(--sub);font-weight:700} .stat .sv{font-weight:800;text-align:right}
+  .badge{display:inline-block;font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;
+    background:#fdf4ef;color:#a8663f;border:1px solid #f0d9cc;margin-bottom:8px}
+  .badge.ok{background:#f1f6f3;color:var(--green-dd);border-color:#dcebe3}
+  .vlist{margin-top:10px;max-height:250px;overflow:auto;border:1px solid var(--line2);border-radius:11px}
+  .vitem{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line2);font-size:11.5px}
+  .vitem:last-child{border-bottom:0}
+  .vitem .vd{flex:1;min-width:0}
+  .vitem .vd b{font-size:12.5px} .vitem .vd i{font-style:normal;color:var(--sub);display:block;font-size:10.5px}
+  .vitem .vx{flex:none;color:var(--terra);font-weight:800;font-size:15px;padding:2px 7px}
   .foot{font-size:11px;color:var(--sub);text-align:center;margin-top:22px;line-height:1.8}
   .hint{font-size:12px;color:var(--sub);margin-top:8px}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
@@ -121,6 +163,11 @@
         <span id="liveB">明るさ：—</span>
         <span id="liveF">—fps</span>
       </div>
+      <div class="guide" id="guide"><span class="gi" id="guideIcon">🔎</span><span class="gt" id="guideText">信号を確認しています</span></div>
+      <div class="qbar">
+        <div class="ql"><span>波形の品質</span><span id="qval">—</span></div>
+        <div class="qt"><i id="qfill"></i></div>
+      </div>
       <canvas id="wave" width="600" height="140"></canvas>
     </div>
 
@@ -135,12 +182,39 @@
     <div class="card" style="text-align:center">
       <div id="resMain"></div>
       <div class="reason" id="resReason"></div>
+
+      <!-- 検証入力（数値が確定したときだけ出す。入力は任意） -->
+      <div class="vbox" id="vbox" style="display:none">
+        <h4>📋 血圧計と比べる（任意）</h4>
+        <div class="vhint" style="margin-top:2px">血圧計に出ている脈拍を入れると、誤差を記録して集計できます。入れなくても測定は完了しています。</div>
+        <div class="vrow"><label>アプリ測定値</label><span class="fixed mono" id="vApp">—</span></div>
+        <div class="vrow"><label>血圧計の脈拍</label><input id="vRef" inputmode="numeric" placeholder="例 64"></div>
+        <div class="vrow"><label>測定状態</label>
+          <select id="vCond"><option value="rest">安静時</option><option value="post">運動後</option><option value="other">その他</option></select>
+        </div>
+        <div class="vdiff" id="vDiff"></div>
+        <button class="btn" id="btnSaveV" style="margin-top:6px">💾 検証データとして保存</button>
+        <div class="vok" id="vOk" style="display:none"></div>
+      </div>
+
       <button class="btn ghost" id="btnAgain">🔁 もう一度 測る</button>
     </div>
   </div>
 
-  <!-- ============ 4. 診断ログ ============ -->
-  <div class="stitle">4. 診断ログ（実機の結果を持ち帰る用）</div>
+  <!-- ============ 4. 検証データ ============ -->
+  <div class="stitle">4. 検証データ（血圧計との比較）</div>
+  <div class="card">
+    <div id="vStats"></div>
+    <div id="vBreak"></div>
+    <div class="vlist" id="vList" style="display:none"></div>
+    <button class="btn ghost" id="btnUndo" style="display:none">↩️ 直前の保存を取り消す</button>
+    <button class="btn ghost" id="btnCsv" style="display:none">📄 CSVで出力（コピー）</button>
+    <button class="btn ghost" id="btnClearAll" style="display:none">🗑 全検証データを削除</button>
+    <div class="vhint">保存されるのは数値だけです。映像・画像・カメラのフレームは保存しません。</div>
+  </div>
+
+  <!-- ============ 5. 診断ログ ============ -->
+  <div class="stitle">5. 診断ログ（実機の結果を持ち帰る用）</div>
   <div class="card">
     <div class="hint" style="margin-top:0">数字を見ながらしきい値を詰めるための記録です。個人が特定される情報は含まれません。</div>
     <div class="log mono" id="log">（まだありません）</div>
@@ -294,6 +368,7 @@ let running = false;
 let samples = [];        // {t(ms), g, r, b, bright, sd, ok}
 let t0 = 0, frameCount = 0, badFrames = 0, prepFrames = 0;
 let settingsWatch = null, lastSettings = "";
+let measEnv = {}, lastResult = null;
 
 const canvas = document.createElement("canvas");
 canvas.width = CFG.GRID; canvas.height = CFG.GRID;
@@ -366,6 +441,9 @@ async function start() {
 
   const s0 = track.getSettings ? track.getSettings() : {};
   lastSettings = `${s0.width}x${s0.height}@${s0.frameRate}`;
+  /* 測定環境を控えておく（検証データに一緒に残す。映像は残さない） */
+  const caps0 = track.getCapabilities ? (track.getCapabilities() || {}) : {};
+  measEnv = { cam: lastSettings, torch: ("torch" in caps0), standalone: !!(window.navigator.standalone || window.matchMedia("(display-mode: standalone)").matches) };
   log(`[start] ${new Date().toISOString()} strict=${strict} ${lastSettings}`);
 
   /* 途中でレンズが切り替わっていないか見張る（解像度やfpsが変わったら怪しい） */
@@ -445,6 +523,7 @@ function tick() {
   $("liveQ").textContent = "信号：" + (okRate > 0.8 ? "良好" : okRate > 0.5 ? "弱い" : "検出できず");
   $("liveB").textContent = "明るさ：" + Math.round(bright);
   $("liveF").textContent = fps.toFixed(0) + "fps";
+  updateGuide(recent, bright, okRate, prep);
   drawWave();
 
   const th = TH();
@@ -454,6 +533,73 @@ function tick() {
     if (fps < th.minFps) { fail("コマ数が足りません（" + fps.toFixed(0) + "fps）。ほかのアプリを閉じて、もう一度測ってください。"); return; }
   }
   if (el >= CFG.TOTAL_SEC) finish();
+}
+
+/* =========================================================================
+   リアルタイムガイド ― 表示だけの機能。測定アルゴリズムには一切関与しない。
+   ========================================================================= */
+const GUIDE = {
+  HOLD_MS: 1500,        // 同じ表示を最低これだけ保つ（文字のチカチカ防止）
+  TIGHT_ACDC: 0.0008,   // 明るさは足りているのに脈が出ない＝押しつけすぎ
+  DARK: 20, BRIGHT: 235,
+  MOVE_SD: 30,
+};
+let guideKey = "", guideAt = 0;
+
+/* 表示用の簡易デトレンド（移動平均を引いてゆっくりした揺れを落とす） */
+function detrendSimple(v) {
+  const k = Math.max(3, Math.round(v.length / 8)), out = [];
+  for (let i = 0; i < v.length; i++) {
+    let s = 0, n = 0;
+    for (let j = Math.max(0, i - k); j <= Math.min(v.length - 1, i + k); j++) { s += v[j]; n++; }
+    out.push(v[i] - s / n);
+  }
+  return out;
+}
+/* 直近の波の振幅を明るさで割った値。脈の出やすさの目安。 */
+function liveAcDc(seg) {
+  if (seg.length < 10) return 0;
+  const v = seg.map((s) => s.g);
+  const m = v.reduce((a, b) => a + b, 0) / v.length;
+  if (m <= 0) return 0;
+  const det = detrendSimple(v);
+  let s = 0; for (let i = 0; i < det.length; i++) s += det[i] * det[i];
+  return (Math.sqrt(s / det.length) * 2) / m;
+}
+
+function updateGuide(recent, bright, okRate, prep) {
+  const th = TH();
+  const acdc = liveAcDc(recent);
+  const sd = recent.length ? recent.reduce((a, s) => a + s.sd, 0) / recent.length : 0;
+  const red = recent.length ? recent.reduce((a, s) => a + s.redRatio, 0) / recent.length : 0;
+
+  /* 品質バー：AC/DC を 0〜100% に置き換えた目安 */
+  const q = clamp((acdc / (th.minAcDc * 3)) * 100, 0, 100);
+  $("qfill").style.width = q.toFixed(0) + "%";
+  $("qfill").className = q >= 60 ? "" : q >= 30 ? "low" : "bad";
+  $("qval").textContent = recent.length < 10 ? "—" : q.toFixed(0) + "%";
+
+  /* 状態の判定。上にあるものほど優先する。 */
+  let key, icon, text, cls;
+  if (recent.length < 8)              { key = "wait";  icon = "🔎"; text = "信号を確認しています"; cls = ""; }
+  else if (bright < GUIDE.DARK)       { key = "dark";  icon = "💡"; text = "暗すぎます。明るい場所へ移動してください"; cls = "bad"; }
+  else if (red < th.minRedRatio || bright > GUIDE.BRIGHT)
+                                      { key = "off";   icon = "👆"; text = "レンズを完全に覆ってください"; cls = "bad"; }
+  else if (sd > GUIDE.MOVE_SD)        { key = "move";  icon = "✋"; text = "指が動いています。そのまま止めてください"; cls = "warn"; }
+  else if (acdc < GUIDE.TIGHT_ACDC)   { key = "tight"; icon = "🤏"; text = "指の力を少し緩めてください"; cls = "warn"; }
+  else if (okRate < 0.8 || acdc < th.minAcDc)
+                                      { key = "weak";  icon = "〰️"; text = "信号が弱めです。指の位置を少しずらしてください"; cls = "warn"; }
+  else                                { key = "good";  icon = "✅"; text = prep ? "良好です。このまま保ってください" : "測定良好"; cls = ""; }
+
+  const now = performance.now();
+  if (key !== guideKey && now - guideAt >= GUIDE.HOLD_MS) {
+    guideKey = key; guideAt = now;
+    $("guideIcon").textContent = icon;
+    $("guideText").textContent = text;
+    $("guide").className = "guide " + cls;
+  } else if (key === guideKey) {
+    $("guideText").textContent = text;
+  }
 }
 
 function drawWave() {
@@ -560,8 +706,10 @@ function finish() {
   }
   const bpm = Math.round(kept.reduce((a, b) => a + b, 0) / kept.length);
   const conf = good.reduce((a, w) => a + w.q, 0) / good.length;
-  log(`[result] bpm=${bpm} 採用窓=${kept.length}/${wins.length} ばらつき=${fmt(spread, 1)} 信頼度=${fmt(conf, 2)}`);
-  showResult(bpm, `${CFG.PREP_SEC}秒の準備のあとの${CFG.TOTAL_SEC - CFG.PREP_SEC}秒のうち、安定していた${kept.length}区間の平均です（ばらつき ${fmt(spread, 1)}bpm）。`, null);
+  const stars = starRank(kept.length, wins.length, spread, conf);
+  log(`[result] bpm=${bpm} 採用窓=${kept.length}/${wins.length} ばらつき=${fmt(spread, 1)} 信頼度=${fmt(conf, 2)} ★${stars}`);
+  showResult(bpm, `${CFG.PREP_SEC}秒の準備のあとの${CFG.TOTAL_SEC - CFG.PREP_SEC}秒のうち、安定していた${kept.length}区間の平均です（ばらつき ${fmt(spread, 1)}bpm）。`, null,
+    { stars: stars, conf: conf, kept: kept.length, wins: wins.length, spread: spread, fps: fps, badRate: badRate });
 }
 
 /* ---- 信号処理 ---- */
@@ -635,15 +783,54 @@ function autocorrBpm(x, fs) {
   return { bpm, q: clamp(best.v, 0, 1) };
 }
 
+/* =========================================================================
+   信頼度（★）― 既にある指標を並べ替えて見せるだけ。計算方法は変えない。
+   ========================================================================= */
+function starRank(keptN, winN, spread, conf) {
+  const ratio = winN ? keptN / winN : 0;
+  if (ratio >= 0.99 && spread <= 2 && conf >= 0.85) return 5;
+  if (ratio >= 0.85 && spread <= 4 && conf >= 0.70) return 4;
+  if (ratio >= 0.65 && spread <= 7 && conf >= 0.55) return 3;
+  return 2;
+}
+function starHtml(n) {
+  let s = "";
+  for (let i = 1; i <= 5; i++) s += `<span class="${i <= n ? "on" : "off"}">★</span>`;
+  return `<div class="stars">${s}</div>`;
+}
+/* その★の実測誤差。検証データが3件以上たまっていれば実績を、無ければ目安を出す。 */
+function starNote(n) {
+  const rows = loadV().filter((r) => r.stars === n);
+  if (rows.length >= 3) {
+    const mae = rows.reduce((a, r) => a + Math.abs(r.diff), 0) / rows.length;
+    return `この★での実測平均誤差 <b>±${mae.toFixed(1)}bpm</b>（${rows.length}件）`;
+  }
+  const guess = { 5: "±2", 4: "±3", 3: "±5", 2: "±8" }[n] || "—";
+  return `目安の誤差 ${guess}bpm（実測データを貯めると実績に置き換わります）`;
+}
+
 /* ---- 結果表示 ---- */
-function showResult(bpm, reason, title) {
+function showResult(bpm, reason, title, info) {
   $("resultWrap").style.display = "block";
   if (bpm) {
+    const st = (info && info.stars) || 2;
     $("resMain").innerHTML =
       `<div style="font-size:12.5px;color:var(--sub);font-weight:800">❤️ 心拍数（参考値）</div>
        <div class="bpm mono">${bpm}<small>bpm</small></div>
-       <div class="verdict" style="color:var(--green-dd)">測定できました</div>`;
+       <div class="verdict" style="color:var(--green-dd)">測定できました</div>
+       ${starHtml(st)}
+       <div class="starnote">${starNote(st)}</div>`;
+    lastResult = Object.assign({ bpm: bpm }, info || {});
+    $("vApp").textContent = bpm + " bpm";
+    $("vRef").value = "";
+    $("vDiff").innerHTML = "";
+    $("vOk").style.display = "none";
+    $("btnSaveV").disabled = false;
+    $("btnSaveV").textContent = "💾 検証データとして保存";
+    $("vbox").style.display = "block";
   } else {
+    lastResult = null;
+    $("vbox").style.display = "none";
     $("resMain").innerHTML =
       `<div style="font-size:12.5px;color:var(--sub);font-weight:800">❤️ 心拍数（参考値）</div>
        <div class="bpm mono" style="color:var(--sub);font-size:28px">—</div>
@@ -652,7 +839,222 @@ function showResult(bpm, reason, title) {
   $("resReason").innerHTML = reason + (bpm ? "<br><b>医療機器ではありません。参考値です。</b>" : "");
   $("resultWrap").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
+
+/* =========================================================================
+   検証データ（この試験ページ専用）
+   -------------------------------------------------------------------------
+   保存するのは数値だけ。映像・画像・カメラのフレームは保存しない。
+   ========================================================================= */
+const VKEY = "ppgtest:validation:v1";
+const REF_MIN = 30, REF_MAX = 220;
+
+function loadV() {
+  try { const raw = localStorage.getItem(VKEY); const a = raw ? JSON.parse(raw) : []; return Array.isArray(a) ? a : []; }
+  catch (e) { return []; }
+}
+function saveV(rows) {
+  try { localStorage.setItem(VKEY, JSON.stringify(rows)); return true; }
+  catch (e) { return false; }
+}
+/* 端末の見分けがつく程度の短い文字列（個人が特定される情報は入れない） */
+function deviceTag() {
+  const ua = navigator.userAgent || "";
+  const m = ua.match(/(iPhone|iPad|Android|Macintosh|Windows)/);
+  const os = (ua.match(/OS (\d+[_.]\d+)/) || [])[1] || (ua.match(/Version\/(\d+\.\d+)/) || [])[1] || "";
+  return [(m ? m[1] : "unknown"), os.replace("_", "."), (screen.width + "x" + screen.height)].filter(Boolean).join(" ");
+}
+
+/* 入力欄の見張り：整数かどうか、範囲内かどうかを毎回確かめて差を出す */
+$("vRef").addEventListener("input", refreshDiff);
+function refreshDiff() {
+  const raw = String($("vRef").value).trim();
+  const el = $("vDiff");
+  if (!lastResult) return;
+  if (raw === "") { el.innerHTML = ""; $("btnSaveV").disabled = false; return; }
+  const n = Number(raw);
+  if (!Number.isInteger(n)) {
+    el.innerHTML = `<span class="ng">整数で入れてください（小数は使えません）</span>`;
+    $("btnSaveV").disabled = true; return;
+  }
+  if (n < REF_MIN || n > REF_MAX) {
+    el.innerHTML = `<span class="ng">${REF_MIN}〜${REF_MAX}bpm の範囲で入れてください</span>`;
+    $("btnSaveV").disabled = true; return;
+  }
+  const d = lastResult.bpm - n;
+  const sign = d > 0 ? "+" : "";
+  const cls = Math.abs(d) <= 2 ? "ok" : Math.abs(d) <= 5 ? "na" : "ng";
+  el.innerHTML = `差（アプリ − 血圧計）：<span class="${cls}">${sign}${d} bpm</span>`;
+  $("btnSaveV").disabled = false;
+}
+
+$("btnSaveV").addEventListener("click", () => {
+  if (!lastResult) return;
+  const raw = String($("vRef").value).trim();
+  if (raw === "") { $("vDiff").innerHTML = `<span class="ng">血圧計の脈拍を入れてください</span>`; return; }
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < REF_MIN || n > REF_MAX) { refreshDiff(); return; }
+
+  const cond = $("vCond").value;
+  const condName = { rest: "安静時", post: "運動後", other: "その他" }[cond];
+  const rec = {
+    ts: new Date().toISOString(),
+    app: lastResult.bpm,
+    ref: n,
+    diff: lastResult.bpm - n,
+    abs: Math.abs(lastResult.bpm - n),
+    mode: strict,                                   // 標準 / ゆるめ
+    stars: lastResult.stars,
+    conf: Number((lastResult.conf || 0).toFixed(3)), // 自己相関の平均
+    windows: `${lastResult.kept}/${lastResult.wins}`,
+    spread: Number((lastResult.spread || 0).toFixed(1)),
+    fps: Number((lastResult.fps || 0).toFixed(1)),
+    cond: cond,
+    device: deviceTag(),
+    cam: measEnv.cam || "",
+    torch: !!measEnv.torch,
+  };
+  const rows = loadV();
+  rows.push(rec);
+  if (!saveV(rows)) { $("vDiff").innerHTML = `<span class="ng">保存できませんでした（端末の空き容量をご確認ください）</span>`; return; }
+
+  const sign = rec.diff > 0 ? "+" : "";
+  $("vOk").textContent = `血圧計${rec.ref}bpm、アプリ${rec.app}bpm、差${sign}${rec.diff}bpm（${condName}・${rec.mode === "normal" ? "標準" : "ゆるめ"}・★${rec.stars}）として保存しました`;
+  $("vOk").style.display = "block";
+  $("btnSaveV").disabled = true;
+  $("btnSaveV").textContent = "保存しました";
+  log(`[valid] app=${rec.app} ref=${rec.ref} diff=${sign}${rec.diff} ★${rec.stars} ${condName}`);
+  renderStats();
+});
+
+/* ---- 集計 ---- */
+function stats(rows) {
+  const n = rows.length;
+  if (!n) return null;
+  const d = rows.map((r) => r.diff);
+  const bias = d.reduce((a, b) => a + b, 0) / n;
+  const mae = rows.reduce((a, r) => a + r.abs, 0) / n;
+  const rmse = Math.sqrt(d.reduce((a, b) => a + b * b, 0) / n);
+  const max = Math.max(...rows.map((r) => r.abs));
+  const sd = n > 1 ? Math.sqrt(d.reduce((a, b) => a + (b - bias) * (b - bias), 0) / (n - 1)) : 0;
+  const w2 = rows.filter((r) => r.abs <= 2).length / n * 100;
+  const w5 = rows.filter((r) => r.abs <= 5).length / n * 100;
+  /* AAMI EC13 の考え方：±5bpm または ±10% の大きいほうに入っていれば合格 */
+  const aami = rows.filter((r) => r.abs <= Math.max(5, r.ref * 0.10)).length / n * 100;
+  return { n, bias, mae, rmse, max, sd, loLo: bias - 1.96 * sd, loHi: bias + 1.96 * sd, w2, w5, aami };
+}
+
+function renderStats() {
+  const rows = loadV();
+  const has = rows.length > 0;
+  ["btnUndo", "btnCsv", "btnClearAll"].forEach((id) => { $(id).style.display = has ? "block" : "none"; });
+  $("vList").style.display = has ? "block" : "none";
+
+  if (!has) {
+    $("vStats").innerHTML = `<div class="vhint" style="margin-top:0">まだ比較データがありません。測定のあとに血圧計の脈拍を入れると、ここに誤差の集計が出ます。</div>`;
+    $("vBreak").innerHTML = "";
+    $("vList").innerHTML = "";
+    return;
+  }
+  const s = stats(rows);
+  const few = s.n < 20;
+  const badge = few
+    ? `<span class="badge">n=${s.n}｜データが少ないため参考値（20件以上で信頼できます）</span>`
+    : `<span class="badge ok">n=${s.n}｜集計できる件数です</span>`;
+
+  const row = (l, v, cls) => `<div class="stat"><span class="sl">${l}</span><span class="sv mono ${cls || ""}">${v}</span></div>`;
+  const sgn = (v) => (v > 0 ? "+" : "") + v.toFixed(2);
+  $("vStats").innerHTML = badge +
+    row("比較回数", s.n + " 件") +
+    row("平均絶対誤差（MAE）", s.mae.toFixed(2) + " bpm") +
+    row("RMSE", s.rmse.toFixed(2) + " bpm") +
+    row("最大誤差", s.max + " bpm") +
+    row("バイアス（アプリ − 血圧計）", sgn(s.bias) + " bpm") +
+    row("一致限界（Bland–Altman）", `${sgn(s.loLo)} 〜 ${sgn(s.loHi)}`) +
+    row("±2bpm 以内率", s.w2.toFixed(0) + " %", s.w2 >= 80 ? "ok" : "") +
+    row("±5bpm 以内率", s.w5.toFixed(0) + " %", s.w5 >= 90 ? "ok" : "") +
+    row("±5bpm または ±10% 以内率", s.aami.toFixed(0) + " %", s.aami >= 90 ? "ok" : "");
+
+  /* 測定環境ごとの内訳 */
+  const groups = [
+    ["測定状態", { rest: "安静時", post: "運動後", other: "その他" }, (r) => r.cond],
+    ["判定モード", { normal: "標準", loose: "ゆるめ" }, (r) => r.mode],
+    ["信頼度", { 5: "★5", 4: "★4", 3: "★3", 2: "★2" }, (r) => String(r.stars)],
+  ];
+  let html = `<div class="stitle" style="margin:16px 4px 4px">内訳</div>`;
+  groups.forEach(([name, labels, key]) => {
+    const keys = [...new Set(rows.map(key))];
+    if (keys.length < 1) return;
+    html += `<div class="stat"><span class="sl">${name}</span><span class="sv"></span></div>`;
+    keys.forEach((k) => {
+      const sub = stats(rows.filter((r) => key(r) === k));
+      html += `<div class="stat"><span class="sl">　${labels[k] || k}（${sub.n}件）</span>` +
+        `<span class="sv mono">MAE ${sub.mae.toFixed(1)} / 最大 ${sub.max}</span></div>`;
+    });
+  });
+  /* 端末ごと */
+  const devs = [...new Set(rows.map((r) => r.device))];
+  if (devs.length > 1) {
+    html += `<div class="stat"><span class="sl">端末</span><span class="sv"></span></div>`;
+    devs.forEach((dv) => {
+      const sub = stats(rows.filter((r) => r.device === dv));
+      html += `<div class="stat"><span class="sl">　${dv}（${sub.n}件）</span><span class="sv mono">MAE ${sub.mae.toFixed(1)}</span></div>`;
+    });
+  }
+  $("vBreak").innerHTML = html;
+
+  /* 一覧（新しい順）。× で1件ずつ消せる。 */
+  $("vList").innerHTML = rows.slice().reverse().map((r) => {
+    const i = rows.indexOf(r);
+    const sign = r.diff > 0 ? "+" : "";
+    const cls = r.abs <= 2 ? "ok" : r.abs <= 5 ? "na" : "ng";
+    const cn = { rest: "安静時", post: "運動後", other: "その他" }[r.cond] || "";
+    const t = new Date(r.ts);
+    return `<div class="vitem">
+      <span class="vd">
+        <b class="mono">アプリ ${r.app} / 血圧計 ${r.ref} <span class="${cls}">${sign}${r.diff}</span></b>
+        <i>${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}・${cn}・★${r.stars}・${r.windows}・ばらつき${r.spread}</i>
+      </span>
+      <button class="vx" data-del="${i}">×</button>
+    </div>`;
+  }).join("");
+}
+
+/* 個別削除 */
+$("vList").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-del]"); if (!b) return;
+  const i = Number(b.dataset.del);
+  const rows = loadV();
+  if (i < 0 || i >= rows.length) return;
+  const r = rows[i];
+  if (!confirm(`この1件を削除しますか？\nアプリ ${r.app} / 血圧計 ${r.ref}`)) return;
+  rows.splice(i, 1); saveV(rows); renderStats();
+});
+/* 直前の保存を取り消す */
+$("btnUndo").addEventListener("click", () => {
+  const rows = loadV(); if (!rows.length) return;
+  const r = rows[rows.length - 1];
+  if (!confirm(`直前の保存を取り消しますか？\nアプリ ${r.app} / 血圧計 ${r.ref}`)) return;
+  rows.pop(); saveV(rows); renderStats();
+});
+/* 全削除 */
+$("btnClearAll").addEventListener("click", () => {
+  const rows = loadV();
+  if (!confirm(`検証データ ${rows.length} 件をすべて削除します。元に戻せません。`)) return;
+  saveV([]); renderStats();
+});
+/* CSV出力（クリップボードへ。ネットワークへは送らない） */
+$("btnCsv").addEventListener("click", async () => {
+  const rows = loadV(); if (!rows.length) return;
+  const head = ["日時", "アプリ", "血圧計", "差", "絶対誤差", "モード", "信頼度", "採用窓", "ばらつき", "fps", "測定状態", "端末", "カメラ", "ライト"];
+  const body = rows.map((r) => [r.ts, r.app, r.ref, r.diff, r.abs, r.mode, r.stars, r.windows, r.spread, r.fps, r.cond, r.device, r.cam, r.torch]
+    .map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+  const csv = [head.join(","), ...body].join("\n");
+  try { await navigator.clipboard.writeText(csv); $("btnCsv").textContent = "📄 コピーしました"; }
+  catch (e) { $("btnCsv").textContent = "コピーできませんでした"; }
+  setTimeout(() => { $("btnCsv").textContent = "📄 CSVで出力（コピー）"; }, 1800);
+});
+
+renderStats();
 </script>
 </body>
 </html>
-
