@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>心拍数（カメラ）実現性テスト</title>
+<!-- =========================================================================
+     カメラ（PPG）心拍数 ― 実現性の検証ページ
+     -------------------------------------------------------------------------
+     ・家計簿アプリ本体には組み込まない、独立した試験ページです。
+     ・映像・画像・数値は一切ネットワークへ送りません（fetch/XHR を使いません）。
+     ・端末に保存もしません（localStorage 等を使いません）。
+     ・医療機器ではありません。参考値です。
+     ========================================================================= -->
+<style>
+  :root{
+    --bg:#f6f8f7; --card:#fff; --ink:#213330; --sub:#6f807c;
+    --line:#e6ece9; --line2:#eef2f0;
+    --green-d:#3f826a; --green-dd:#2f6a55; --terra:#c2694f; --amber:#b8862f;
+    --shadow:0 1px 3px rgba(20,40,38,.05),0 10px 26px rgba(20,40,38,.07);
+    --radius:16px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.7;font-size:16px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.02em}
+  button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
+  .wrap{max-width:520px;margin:0 auto;padding:16px 16px 40px}
+  h1{font-size:19px;margin:6px 0 2px;font-weight:800}
+  .lead{font-size:12.5px;color:var(--sub);margin:0 0 12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 15px;box-shadow:var(--shadow);margin-top:12px}
+  .stitle{font-size:13px;font-weight:800;color:var(--sub);margin:20px 4px 6px}
+  .warn{background:#fdf4ef;border:1px solid #f0d9cc;border-radius:14px;padding:12px 14px;font-size:12.5px;color:#7d4a35}
+  .warn b{color:var(--terra)}
+  .btn{width:100%;background:var(--green-d);color:#fff;border-radius:15px;padding:15px;
+    font-size:15.5px;font-weight:800;box-shadow:0 6px 14px rgba(63,130,106,.28)}
+  .btn[disabled]{opacity:.45;box-shadow:none}
+  .btn.ghost{background:#fff;color:var(--green-d);border:1.5px solid #bfe0d3;box-shadow:none;margin-top:8px}
+  .btn.stop{background:var(--terra);box-shadow:0 6px 14px rgba(194,105,79,.28)}
+  .row{display:flex;gap:8px;align-items:center;justify-content:space-between;
+    font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--line2)}
+  .row:last-child{border-bottom:0}
+  .row .k{color:var(--sub);font-weight:700}
+  .row .v{font-weight:800;text-align:right;word-break:break-all;max-width:62%}
+  .ok{color:var(--green-dd)} .ng{color:var(--terra)} .na{color:var(--amber)}
+  /* 測定パネル */
+  .stage{text-align:center;padding:4px 0 2px}
+  .count{font-size:52px;font-weight:800;line-height:1.05;color:var(--green-d)}
+  .count small{font-size:16px;color:var(--sub);font-weight:700;margin-left:4px}
+  .phase{font-size:14px;font-weight:800;margin-top:2px;min-height:22px}
+  .hold{font-size:12.5px;color:var(--sub);font-weight:700;min-height:20px}
+  .track{height:10px;background:#eef1ef;border-radius:6px;overflow:hidden;margin:12px 0 4px}
+  .track i{display:block;height:100%;width:0;background:var(--green-d);border-radius:6px;transition:width .25s linear}
+  .track i.prep{background:var(--amber)}
+  .live{display:flex;justify-content:space-between;font-size:11.5px;color:var(--sub);font-weight:700}
+  #wave{width:100%;height:70px;display:block;margin-top:8px;background:#fbfcfb;border-radius:10px;border:1px solid var(--line2)}
+  #cam{position:absolute;width:2px;height:2px;opacity:.01;pointer-events:none;left:-10px;top:-10px}
+  /* 結果 */
+  .bpm{font-size:56px;font-weight:800;color:var(--green-d);line-height:1.1}
+  .bpm small{font-size:17px;color:var(--sub);margin-left:6px;font-weight:700}
+  .verdict{font-size:14px;font-weight:800;margin-top:4px}
+  .reason{font-size:12.5px;color:var(--sub);margin-top:6px}
+  .log{font-size:11px;line-height:1.55;white-space:pre-wrap;word-break:break-all;
+    background:#fbfcfb;border:1px solid var(--line2);border-radius:10px;padding:10px;max-height:260px;overflow:auto}
+  .seg{display:flex;gap:6px;margin-top:8px}
+  .seg button{flex:1;padding:8px;border:1px solid var(--line2);border-radius:9px;background:#fff;
+    color:var(--sub);font-weight:800;font-size:12.5px}
+  .seg button.on{background:var(--green-d);color:#fff;border-color:var(--green-d)}
+  .foot{font-size:11px;color:var(--sub);text-align:center;margin-top:22px;line-height:1.8}
+  .hint{font-size:12px;color:var(--sub);margin-top:8px}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
+  .dot.on{background:var(--terra)} .dot.off{background:#c9d3cf}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>心拍数（カメラ）実現性テスト</h1>
+  <p class="lead">背面カメラに指先を当て、映像の明るさの周期変化から脈拍を推定します（PPG方式）。この画面は検証用で、家計簿アプリ本体には組み込まれていません。</p>
+
+  <div class="warn">
+    <b>医療機器ではありません。</b>ここに出る数値はあくまで<b>参考値</b>です。
+    診断・治療・服薬の判断には使えません。体調に不安があるときは医療機関にご相談ください。
+    映像と画像は<b>この端末の中だけ</b>で処理し、保存も送信もしません。
+  </div>
+
+  <!-- ============ 1. 環境チェック ============ -->
+  <div class="stitle">1. この端末でできること</div>
+  <div class="card">
+    <button class="btn ghost" id="btnCheck" style="margin-top:0">🔎 この端末を調べる</button>
+    <div id="envRows" style="margin-top:10px"></div>
+    <div class="hint" id="envHint"></div>
+  </div>
+
+  <!-- ============ 2. 測定 ============ -->
+  <div class="stitle">2. 60秒の測定</div>
+  <div class="card">
+    <div class="hint" style="margin-top:0">
+      明るい場所で、<b>背面カメラのレンズを指の腹で完全にふさいで</b>ください。
+      強く押しつけず、そっと。最初の10秒は指の位置と明るさを整える準備時間です。
+    </div>
+    <div class="seg" id="strictSeg">
+      <button data-strict="normal" class="on">判定：標準</button>
+      <button data-strict="loose">判定：ゆるめ（検証用）</button>
+    </div>
+    <button class="btn" id="btnStart" style="margin-top:10px">▶️ 測定をはじめる（60秒）</button>
+    <button class="btn stop" id="btnStop" style="display:none;margin-top:10px">■ 測定をやめる</button>
+
+    <div id="panel" style="display:none">
+      <div class="stage">
+        <div class="count mono"><span id="cnt">60</span><small>秒</small></div>
+        <div class="phase" id="phase">信号を確認中</div>
+        <div class="hold" id="hold">指を動かさないでください</div>
+      </div>
+      <div class="track"><i id="bar" class="prep"></i></div>
+      <div class="live">
+        <span id="liveQ">信号：—</span>
+        <span id="liveB">明るさ：—</span>
+        <span id="liveF">—fps</span>
+      </div>
+      <canvas id="wave" width="600" height="140"></canvas>
+    </div>
+
+    <div style="font-size:11.5px;color:var(--sub);margin-top:10px">
+      <span class="dot off" id="camDot"></span><span id="camState">カメラ：停止中</span>
+    </div>
+  </div>
+
+  <!-- ============ 3. 結果 ============ -->
+  <div id="resultWrap" style="display:none">
+    <div class="stitle">3. 結果</div>
+    <div class="card" style="text-align:center">
+      <div id="resMain"></div>
+      <div class="reason" id="resReason"></div>
+      <button class="btn ghost" id="btnAgain">🔁 もう一度 測る</button>
+    </div>
+  </div>
+
+  <!-- ============ 4. 診断ログ ============ -->
+  <div class="stitle">4. 診断ログ（実機の結果を持ち帰る用）</div>
+  <div class="card">
+    <div class="hint" style="margin-top:0">数字を見ながらしきい値を詰めるための記録です。個人が特定される情報は含まれません。</div>
+    <div class="log mono" id="log">（まだありません）</div>
+    <button class="btn ghost" id="btnCopy">📋 ログをコピー</button>
+  </div>
+
+  <p class="foot">
+    このページは通信を行いません（fetch / XHR / 画像アップロードを一切使いません）。<br>
+    映像はメモリ上で数値化するだけで、フレームも結果も保存しません。<br>
+    医療機器ではありません。参考値です。
+  </p>
+</div>
+
+<video id="cam" playsinline muted autoplay></video>
+
+<script>
+"use strict";
+/* =========================================================================
+   設定値（実機で詰めるためのしきい値は、ここに集約する）
+   ========================================================================= */
+const CFG = {
+  TOTAL_SEC: 60,          // 測定の長さ
+  PREP_SEC: 10,           // 最初の準備時間（この区間は計算に使わない）
+  FS: 30,                 // 解析用に補間しなおすサンプリング周波数(Hz)
+  WIN_SEC: 10,            // 解析する窓の長さ（秒）
+  HOP_SEC: 5,             // 窓をずらす幅（秒）
+  BPM_MIN: 40, BPM_MAX: 180,
+  GRID: 16,               // 1フレームを 16x16 に縮めて平均を取る
+  normal: {
+    minRedRatio: 1.15,    // 赤みの強さ（指が当たっていれば赤が突出する）
+    minBright: 12, maxBright: 246,
+    maxSpatialSd: 34,     // 画面内のばらつき（指で覆えていれば平らになる）
+    minAcDc: 0.0012,      // 脈の振幅／全体の明るさ（信号の強さ）
+    minQuality: 0.45,     // 自己相関のピークの高さ（0〜1）
+    minValidWin: 5,       // 使える窓の最低数（全9窓中）
+    maxSpread: 10,        // 使えた窓どうしの心拍数の開き（bpm）
+    maxBadFrameRate: 0.15,// 準備後に「指が外れた」と判定したコマの割合
+    minFps: 15,
+  },
+  loose: {
+    minRedRatio: 1.02, minBright: 8, maxBright: 250, maxSpatialSd: 48,
+    minAcDc: 0.0006, minQuality: 0.32, minValidWin: 3, maxSpread: 16,
+    maxBadFrameRate: 0.35, minFps: 10,
+  },
+};
+let strict = "normal";
+const TH = () => CFG[strict];
+
+/* =========================================================================
+   小道具
+   ========================================================================= */
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fmt = (v, n) => (v === null || v === undefined || !isFinite(v)) ? "—" : Number(v).toFixed(n);
+let logLines = [];
+function log(s) {
+  logLines.push(s);
+  $("log").textContent = logLines.join("\n");
+  $("log").scrollTop = $("log").scrollHeight;
+}
+function row(k, v, cls) {
+  return `<div class="row"><span class="k">${k}</span><span class="v ${cls || ""}">${v}</span></div>`;
+}
+
+/* =========================================================================
+   1. 環境チェック
+   ========================================================================= */
+let envInfo = {};
+$("btnCheck").addEventListener("click", checkEnv);
+
+async function checkEnv() {
+  const out = [];
+  const secure = window.isSecureContext;
+  const standalone = !!(window.navigator.standalone || window.matchMedia("(display-mode: standalone)").matches);
+  const hasGUM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const hasRVFC = !!HTMLVideoElement.prototype.requestVideoFrameCallback;
+  const hasWake = !!navigator.wakeLock;
+
+  out.push(row("HTTPS（安全な接続）", secure ? "はい" : "いいえ", secure ? "ok" : "ng"));
+  out.push(row("開き方", standalone ? "ホーム画面のPWA" : "ブラウザのタブ"));
+  out.push(row("カメラAPI", hasGUM ? "使える" : "使えない", hasGUM ? "ok" : "ng"));
+  out.push(row("フレーム単位の取得", hasRVFC ? "requestVideoFrameCallback" : "requestAnimationFrame（代替）", hasRVFC ? "ok" : "na"));
+  out.push(row("画面スリープ防止", hasWake ? "使える" : "使えない", hasWake ? "ok" : "na"));
+  $("envRows").innerHTML = out.join("");
+  envInfo = { secure, standalone, hasGUM, hasRVFC, hasWake, ua: navigator.userAgent };
+
+  if (!secure || !hasGUM) {
+    $("envHint").textContent = "カメラを使うにはHTTPSで開く必要があります。";
+    log("[env] HTTPSまたはカメラAPIが使えません");
+    return;
+  }
+
+  $("envHint").textContent = "カメラを一瞬だけ開いて、レンズとライトの様子を確かめます…";
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+    });
+    const track = stream.getVideoTracks()[0];
+    const st = track.getSettings ? track.getSettings() : {};
+    const caps = track.getCapabilities ? (track.getCapabilities() || {}) : {};
+
+    /* ライト（トーチ）：iOSのSafariは今のところ非対応。必ず実行時に確かめる */
+    let torch = "対応していない";
+    let torchCls = "ng";
+    if ("torch" in caps) {
+      try {
+        await track.applyConstraints({ advanced: [{ torch: true }] });
+        await new Promise((r) => setTimeout(r, 400));
+        await track.applyConstraints({ advanced: [{ torch: false }] });
+        torch = "点けられた"; torchCls = "ok";
+      } catch (e) { torch = "capabilities にはあるが失敗（" + (e && e.name) + "）"; torchCls = "na"; }
+    }
+
+    /* レンズの一覧。ラベルはカメラ許可の後でないと空になる端末がある */
+    let lenses = [];
+    try {
+      const ds = await navigator.mediaDevices.enumerateDevices();
+      lenses = ds.filter((d) => d.kind === "videoinput").map((d) => d.label || "(名前なし)");
+    } catch (e) { /* ignore */ }
+
+    const zoom = ("zoom" in caps) ? `${caps.zoom.min}〜${caps.zoom.max}` : "指定できない";
+    const extra = [
+      row("背面カメラ", st.facingMode === "environment" ? "使えた" : "facingMode=" + (st.facingMode || "不明"), st.facingMode === "environment" ? "ok" : "na"),
+      row("解像度 / fps", `${st.width || "?"}×${st.height || "?"} / ${st.frameRate || "?"}`),
+      row("ライト（torch）", torch, torchCls),
+      row("ズーム指定", zoom, ("zoom" in caps) ? "ok" : "na"),
+      row("レンズの数", String(lenses.length) + "（" + (lenses.join(" / ") || "ラベルなし") + "）"),
+    ];
+    $("envRows").innerHTML = out.join("") + extra.join("");
+    $("envHint").innerHTML = ("torch" in caps)
+      ? "ライトが使えます。指の裏から光を当てられるので、精度は上がりやすい構成です。"
+      : "<b>ライトは制御できません。</b>その分だけ信号が弱くなるので、明るい部屋・電気スタンドの下などで測ってください。";
+    envInfo = Object.assign(envInfo, { settings: st, caps: Object.keys(caps), torch, lenses, zoom });
+    log("[env] " + JSON.stringify(envInfo));
+  } catch (e) {
+    $("envHint").textContent = "カメラを開けませんでした：" + (e && (e.name + " / " + e.message));
+    log("[env] getUserMedia 失敗 " + (e && e.name));
+  } finally {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    setCamState(false);
+  }
+}
+
+/* =========================================================================
+   2. 測定
+   ========================================================================= */
+let stream = null, track = null, rafId = null, rvfcId = null, tickId = null, wakeLock = null;
+let running = false;
+let samples = [];        // {t(ms), g, r, b, bright, sd, ok}
+let t0 = 0, frameCount = 0, badFrames = 0, prepFrames = 0;
+let settingsWatch = null, lastSettings = "";
+
+const canvas = document.createElement("canvas");
+canvas.width = CFG.GRID; canvas.height = CFG.GRID;
+const cctx = canvas.getContext("2d", { willReadFrequently: true });
+
+$("strictSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-strict]"); if (!b) return;
+  strict = b.dataset.strict;
+  [...$("strictSeg").children].forEach((c) => c.classList.toggle("on", c === b));
+});
+$("btnStart").addEventListener("click", start);
+$("btnStop").addEventListener("click", () => stopAll("測定をやめました"));
+$("btnAgain").addEventListener("click", () => { $("resultWrap").style.display = "none"; start(); });
+$("btnCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(logLines.join("\n")); $("btnCopy").textContent = "📋 コピーしました"; }
+  catch (e) { $("btnCopy").textContent = "コピーできませんでした（長押しで選択してください）"; }
+  setTimeout(() => { $("btnCopy").textContent = "📋 ログをコピー"; }, 1800);
+});
+
+/* 画面を離れたら必ず止める（タブ切り替え・ホームに戻る・閉じる） */
+document.addEventListener("visibilitychange", () => { if (document.hidden && running) stopAll("画面を離れたので中止しました"); });
+window.addEventListener("pagehide", () => stopAll(null));
+window.addEventListener("beforeunload", () => stopAll(null));
+
+function setCamState(on) {
+  $("camDot").className = "dot " + (on ? "on" : "off");
+  $("camState").textContent = on ? "カメラ：動作中" : "カメラ：停止中";
+}
+
+async function start() {
+  if (running) return;
+  samples = []; frameCount = 0; badFrames = 0; prepFrames = 0; lastSettings = "";
+  $("resultWrap").style.display = "none";
+  $("panel").style.display = "block";
+  $("btnStart").style.display = "none";
+  $("btnStop").style.display = "block";
+  $("phase").textContent = "カメラを準備中";
+  $("hold").textContent = "指を動かさないでください";
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 640 }, height: { ideal: 480 },
+        frameRate: { ideal: 30, max: 30 },
+      },
+    });
+  } catch (e) {
+    fail("カメラを開けませんでした（" + (e && e.name) + "）。設定でカメラを許可してください。");
+    return;
+  }
+  track = stream.getVideoTracks()[0];
+  const v = $("cam");
+  v.srcObject = stream;
+  try { await v.play(); } catch (e) { /* ignore */ }
+  setCamState(true);
+  running = true;
+  t0 = performance.now();
+
+  /* ライトが使えるなら点ける。使えなくても測定は続ける。 */
+  try {
+    const caps = track.getCapabilities ? (track.getCapabilities() || {}) : {};
+    if ("torch" in caps) await track.applyConstraints({ advanced: [{ torch: true }] });
+    /* レンズの自動切り替え対策：ズームを最小（＝広角）に固定してみる */
+    if ("zoom" in caps) await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] });
+  } catch (e) { log("[cam] 制御できない項目があります: " + (e && e.name)); }
+
+  try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { /* ignore */ }
+
+  const s0 = track.getSettings ? track.getSettings() : {};
+  lastSettings = `${s0.width}x${s0.height}@${s0.frameRate}`;
+  log(`[start] ${new Date().toISOString()} strict=${strict} ${lastSettings}`);
+
+  /* 途中でレンズが切り替わっていないか見張る（解像度やfpsが変わったら怪しい） */
+  settingsWatch = setInterval(() => {
+    if (!track) return;
+    const s = track.getSettings ? track.getSettings() : {};
+    const cur = `${s.width}x${s.height}@${s.frameRate}`;
+    if (cur !== lastSettings) {
+      log(`[lens] 設定が変わりました ${lastSettings} → ${cur}`);
+      lastSettings = cur;
+      fail("測定中にカメラのレンズが切り替わりました。もう一度測ってください。");
+    }
+  }, 1000);
+
+  loop();
+  tickId = setInterval(tick, 200);
+}
+
+function loop() {
+  const v = $("cam");
+  const onFrame = (now) => {
+    if (!running) return;
+    grab(v);
+    if (v.requestVideoFrameCallback) rvfcId = v.requestVideoFrameCallback(onFrame);
+    else rafId = requestAnimationFrame(onFrame);
+  };
+  if (v.requestVideoFrameCallback) rvfcId = v.requestVideoFrameCallback(onFrame);
+  else rafId = requestAnimationFrame(onFrame);
+}
+
+/* 1コマぶんの平均色を取る。画像そのものは残さない（読み終えたら捨てる）。 */
+function grab(v) {
+  if (!v.videoWidth) return;
+  const side = Math.min(v.videoWidth, v.videoHeight);
+  const sx = (v.videoWidth - side) / 2, sy = (v.videoHeight - side) / 2;
+  cctx.drawImage(v, sx, sy, side, side, 0, 0, CFG.GRID, CFG.GRID);
+  const d = cctx.getImageData(0, 0, CFG.GRID, CFG.GRID).data;
+  let r = 0, g = 0, b = 0, n = CFG.GRID * CFG.GRID;
+  const lum = new Float32Array(n);
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
+    r += d[p]; g += d[p + 1]; b += d[p + 2];
+    lum[i] = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+  }
+  r /= n; g /= n; b /= n;
+  let m = 0; for (let i = 0; i < n; i++) m += lum[i]; m /= n;
+  let sd = 0; for (let i = 0; i < n; i++) sd += (lum[i] - m) * (lum[i] - m);
+  sd = Math.sqrt(sd / n);
+
+  const th = TH();
+  const redRatio = r / ((g + b) / 2 + 1);
+  const bright = (r + g + b) / 3;
+  const ok = redRatio >= th.minRedRatio && bright >= th.minBright && bright <= th.maxBright && sd <= th.maxSpatialSd;
+
+  samples.push({ t: performance.now() - t0, r, g, b, bright, sd, redRatio, ok });
+  frameCount++;
+  const el = performance.now() - t0;
+  if (el > CFG.PREP_SEC * 1000) { if (!ok) badFrames++; } else { prepFrames++; }
+}
+
+/* 200msごとの画面更新と、途中中止の判定 */
+function tick() {
+  if (!running) return;
+  const el = (performance.now() - t0) / 1000;
+  const left = Math.max(0, CFG.TOTAL_SEC - el);
+  $("cnt").textContent = Math.ceil(left);
+  const prep = el < CFG.PREP_SEC;
+  $("bar").className = prep ? "prep" : "";
+  $("bar").style.width = clamp((el / CFG.TOTAL_SEC) * 100, 0, 100) + "%";
+  $("phase").textContent = prep ? "信号を確認中" : "測定中";
+  $("hold").textContent = "指を動かさないでください";
+
+  /* 直近3秒の様子 */
+  const recent = samples.filter((s) => s.t > (el - 3) * 1000);
+  const okRate = recent.length ? recent.filter((s) => s.ok).length / recent.length : 0;
+  const bright = recent.length ? recent.reduce((a, s) => a + s.bright, 0) / recent.length : 0;
+  const fps = recent.length / 3;
+  $("liveQ").textContent = "信号：" + (okRate > 0.8 ? "良好" : okRate > 0.5 ? "弱い" : "検出できず");
+  $("liveB").textContent = "明るさ：" + Math.round(bright);
+  $("liveF").textContent = fps.toFixed(0) + "fps";
+  drawWave();
+
+  const th = TH();
+  /* 準備時間が終わっても指が当たっていないなら、そこで打ち切る */
+  if (!prep && recent.length > 10) {
+    if (okRate < 0.4) { fail(bright < th.minBright ? "暗すぎます。明るい場所でもう一度測ってください。" : "指が外れているようです。レンズを指の腹でふさいで、もう一度測ってください。"); return; }
+    if (fps < th.minFps) { fail("コマ数が足りません（" + fps.toFixed(0) + "fps）。ほかのアプリを閉じて、もう一度測ってください。"); return; }
+  }
+  if (el >= CFG.TOTAL_SEC) finish();
+}
+
+function drawWave() {
+  const c = $("wave"), g = c.getContext("2d");
+  const W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  const el = performance.now() - t0;
+  const seg = samples.filter((s) => s.t > el - 6000);
+  if (seg.length < 8) return;
+  const vals = seg.map((s) => s.g);
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const dev = vals.map((v) => v - mean);
+  const amp = Math.max(0.4, Math.max(...dev.map(Math.abs)));
+  g.beginPath();
+  dev.forEach((v, i) => {
+    const x = (i / (dev.length - 1)) * W;
+    const y = H / 2 - (v / amp) * (H / 2 - 8);
+    i ? g.lineTo(x, y) : g.moveTo(x, y);
+  });
+  g.strokeStyle = "#3f826a"; g.lineWidth = 2; g.lineJoin = "round"; g.stroke();
+}
+
+/* =========================================================================
+   3. 停止（測定終了・中止・画面移動のすべてでここを通す）
+   ========================================================================= */
+function stopAll(msg) {
+  running = false;
+  if (tickId) { clearInterval(tickId); tickId = null; }
+  if (settingsWatch) { clearInterval(settingsWatch); settingsWatch = null; }
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (rvfcId && $("cam").cancelVideoFrameCallback) { $("cam").cancelVideoFrameCallback(rvfcId); rvfcId = null; }
+  if (track) {
+    try { track.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) { /* ignore */ }
+  }
+  if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+  track = null;
+  const v = $("cam");
+  try { v.pause(); v.srcObject = null; } catch (e) { /* ignore */ }
+  if (wakeLock) { try { wakeLock.release(); } catch (e) { /* ignore */ } wakeLock = null; }
+  setCamState(false);
+  $("btnStart").style.display = "block";
+  $("btnStop").style.display = "none";
+  $("panel").style.display = "none";
+  if (msg) { showResult(null, msg, "中止しました"); log("[stop] " + msg); }
+}
+
+function fail(reason) {
+  const kept = reason;
+  stopAll(null);
+  showResult(null, kept, "確定できませんでした");
+  log("[fail] " + reason);
+}
+
+/* =========================================================================
+   4. 解析（準備時間を除いた区間だけを使う）
+   ========================================================================= */
+function finish() {
+  const raw = samples.slice();
+  stopAll(null);
+  const th = TH();
+  const use = raw.filter((s) => s.t >= CFG.PREP_SEC * 1000);
+  const total = use.length;
+  const bad = use.filter((s) => !s.ok).length;
+  const badRate = total ? bad / total : 1;
+  const fps = total / (CFG.TOTAL_SEC - CFG.PREP_SEC);
+  log(`[frames] 全${raw.length} 解析対象${total} 実効${fps.toFixed(1)}fps 不良${(badRate * 100).toFixed(1)}%`);
+
+  if (total < 100) return showResult(null, "コマ数が足りませんでした。もう一度測ってください。", "確定できませんでした");
+  if (fps < th.minFps) return showResult(null, `コマ数が足りません（${fps.toFixed(0)}fps）。ほかのアプリを閉じて、もう一度測ってください。`, "確定できませんでした");
+  if (badRate > th.maxBadFrameRate) return showResult(null, "測定中に指が外れたか、明るさが変わりました。指を動かさずに、もう一度測ってください。", "確定できませんでした");
+
+  /* 一定間隔に並べ直す（コマの間隔はばらつくため） */
+  const sig = resample(use.map((s) => s.t), use.map((s) => s.g), CFG.FS);
+  if (!sig || sig.length < CFG.FS * CFG.WIN_SEC) return showResult(null, "信号が足りませんでした。もう一度測ってください。", "確定できませんでした");
+
+  /* 明るさに対する脈の振幅（信号の強さ） */
+  const dcMean = use.reduce((a, s) => a + s.g, 0) / use.length;
+  const filt = bandpass(sig, CFG.FS);
+  const acAmp = rms(filt) * 2;
+  const acdc = acAmp / Math.max(1, dcMean);
+  log(`[signal] DC=${fmt(dcMean, 1)} AC=${fmt(acAmp, 3)} AC/DC=${fmt(acdc, 5)}`);
+  if (acdc < th.minAcDc) return showResult(null, "脈の信号が弱すぎます。レンズを指の腹でしっかりふさぎ、明るい場所でもう一度測ってください。", "確定できませんでした");
+
+  /* 10秒の窓を5秒ずつずらして、それぞれの心拍数と信頼度を出す */
+  const win = CFG.WIN_SEC * CFG.FS, hop = CFG.HOP_SEC * CFG.FS;
+  const wins = [];
+  for (let s = 0; s + win <= filt.length; s += hop) {
+    const seg = filt.slice(s, s + win);
+    const r = autocorrBpm(seg, CFG.FS);
+    wins.push({ at: CFG.PREP_SEC + s / CFG.FS, bpm: r.bpm, q: r.q });
+    log(`[win] ${(CFG.PREP_SEC + s / CFG.FS).toFixed(0)}s bpm=${fmt(r.bpm, 1)} q=${fmt(r.q, 2)}`);
+  }
+  const good = wins.filter((w) => w.bpm && w.q >= th.minQuality);
+  if (good.length < th.minValidWin) {
+    return showResult(null, "波形が安定しませんでした。指を動かさず、力を抜いて、もう一度測ってください。", "確定できませんでした");
+  }
+  const bpms = good.map((w) => w.bpm).sort((a, b) => a - b);
+  const med = bpms[Math.floor(bpms.length / 2)];
+  /* 中央値から離れすぎた窓は外れ値として捨て、残りで平均する */
+  const kept = bpms.filter((b) => Math.abs(b - med) <= th.maxSpread / 2);
+  const spread = kept.length ? kept[kept.length - 1] - kept[0] : 999;
+  if (kept.length < th.minValidWin || spread > th.maxSpread) {
+    return showResult(null, "測定が不安定でした（値のばらつきが大きい）。落ち着いた姿勢で、もう一度測ってください。", "確定できませんでした");
+  }
+  const bpm = Math.round(kept.reduce((a, b) => a + b, 0) / kept.length);
+  const conf = good.reduce((a, w) => a + w.q, 0) / good.length;
+  log(`[result] bpm=${bpm} 採用窓=${kept.length}/${wins.length} ばらつき=${fmt(spread, 1)} 信頼度=${fmt(conf, 2)}`);
+  showResult(bpm, `${CFG.PREP_SEC}秒の準備のあとの${CFG.TOTAL_SEC - CFG.PREP_SEC}秒のうち、安定していた${kept.length}区間の平均です（ばらつき ${fmt(spread, 1)}bpm）。`, null);
+}
+
+/* ---- 信号処理 ---- */
+function resample(ts, vs, fs) {
+  if (ts.length < 4) return null;
+  const t0 = ts[0], t1 = ts[ts.length - 1];
+  const n = Math.floor(((t1 - t0) / 1000) * fs);
+  if (n < 10) return null;
+  const out = new Float64Array(n);
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    const t = t0 + (i / fs) * 1000;
+    while (j < ts.length - 2 && ts[j + 1] < t) j++;
+    const a = ts[j], b = ts[j + 1], w = b > a ? (t - a) / (b - a) : 0;
+    out[i] = vs[j] + (vs[j + 1] - vs[j]) * clamp(w, 0, 1);
+  }
+  return out;
+}
+/* 移動平均で「ゆっくりした揺れ」と「細かいノイズ」を落とす（簡易バンドパス） */
+function movAvg(x, k) {
+  const n = x.length, out = new Float64Array(n);
+  let sum = 0;
+  const half = Math.floor(k / 2);
+  for (let i = 0; i < n; i++) {
+    sum += x[i];
+    if (i >= k) sum -= x[i - k];
+    out[clamp(i - half, 0, n - 1)] = sum / Math.min(k, i + 1);
+  }
+  return out;
+}
+function bandpass(x, fs) {
+  const slow = movAvg(x, Math.round(fs * 1.2));   // 0.8Hz より遅い成分＝土台の揺れ
+  const d = new Float64Array(x.length);
+  for (let i = 0; i < x.length; i++) d[i] = x[i] - slow[i];
+  return movAvg(d, Math.max(2, Math.round(fs * 0.12))); // 細かいノイズを丸める
+}
+function rms(x) { let s = 0; for (let i = 0; i < x.length; i++) s += x[i] * x[i]; return Math.sqrt(s / x.length); }
+
+/* 自己相関で周期を探す。q は 0〜1 の信頼度（波形の繰り返しの良さ）。 */
+function autocorrBpm(x, fs) {
+  const n = x.length;
+  let mean = 0; for (let i = 0; i < n; i++) mean += x[i]; mean /= n;
+  const y = new Float64Array(n);
+  for (let i = 0; i < n; i++) y[i] = x[i] - mean;
+  const minLag = Math.floor((60 / CFG.BPM_MAX) * fs);
+  const maxLag = Math.min(n - 1, Math.ceil((60 / CFG.BPM_MIN) * fs));
+  let best = { lag: 0, v: 0 }, second = { lag: 0, v: 0 };
+  const corr = new Float64Array(maxLag + 1);
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let s = 0, a = 0, b = 0;
+    for (let i = 0; i + lag < n; i++) { s += y[i] * y[i + lag]; a += y[i] * y[i]; b += y[i + lag] * y[i + lag]; }
+    const v = (a > 0 && b > 0) ? s / Math.sqrt(a * b) : 0;
+    corr[lag] = v;
+    if (v > best.v) { second = best; best = { lag, v }; }
+  }
+  if (!best.lag || best.v <= 0) return { bpm: null, q: 0 };
+  /* 自己相関は 2倍・3倍の周期にも山ができる。いちばん短い（＝速い）山を本命にする。 */
+  for (let lag = minLag + 1; lag < best.lag - 1; lag++) {
+    if (corr[lag] >= best.v * 0.85 && corr[lag] >= corr[lag - 1] && corr[lag] >= corr[lag + 1]) {
+      best = { lag: lag, v: corr[lag] };
+      break;
+    }
+  }
+  /* 山の頂点を放物線で補間して、細かい精度を出す */
+  const l = corr[best.lag - 1] || 0, c = corr[best.lag], r = corr[best.lag + 1] || 0;
+  const denom = (l - 2 * c + r);
+  const shift = denom !== 0 ? (0.5 * (l - r)) / denom : 0;
+  const lag = best.lag + clamp(shift, -1, 1);
+  const bpm = (60 * fs) / lag;
+  if (bpm < CFG.BPM_MIN || bpm > CFG.BPM_MAX) return { bpm: null, q: 0 };
+  return { bpm, q: clamp(best.v, 0, 1) };
+}
+
+/* ---- 結果表示 ---- */
+function showResult(bpm, reason, title) {
+  $("resultWrap").style.display = "block";
+  if (bpm) {
+    $("resMain").innerHTML =
+      `<div style="font-size:12.5px;color:var(--sub);font-weight:800">❤️ 心拍数（参考値）</div>
+       <div class="bpm mono">${bpm}<small>bpm</small></div>
+       <div class="verdict" style="color:var(--green-dd)">測定できました</div>`;
+  } else {
+    $("resMain").innerHTML =
+      `<div style="font-size:12.5px;color:var(--sub);font-weight:800">❤️ 心拍数（参考値）</div>
+       <div class="bpm mono" style="color:var(--sub);font-size:28px">—</div>
+       <div class="verdict" style="color:var(--terra)">${title || "確定できませんでした"}</div>`;
+  }
+  $("resReason").innerHTML = reason + (bpm ? "<br><b>医療機器ではありません。参考値です。</b>" : "");
+  $("resultWrap").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+</script>
+</body>
+</html>
